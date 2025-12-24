@@ -8,7 +8,7 @@ class GoogleAuthManager {
     var error: String?
 
     // OAuth Client ID from Google Cloud Console
-    static let clientID = "229678887588-bt4vpmks8aaad0lkcomaavkmktf1ev78.apps.googleusercontent.com"
+    static let clientID = "51361032312-p8evns3f8egj6eiqe0m49qdheli4p5d3.apps.googleusercontent.com"
 
     // Calendar API scope for read-only access
     private let calendarScope = "https://www.googleapis.com/auth/calendar.readonly"

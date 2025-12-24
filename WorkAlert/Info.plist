@@ -7,13 +7,13 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.229678887588-bt4vpmks8aaad0lkcomaavkmktf1ev78</string>
+				<string>com.googleusercontent.apps.51361032312-p8evns3f8egj6eiqe0m49qdheli4p5d3</string>
 			</array>
 			<key>CFBundleURLName</key>
 			<string>Google Sign-In</string>
 		</dict>
 	</array>
 	<key>GIDClientID</key>
-	<string>229678887588-bt4vpmks8aaad0lkcomaavkmktf1ev78.apps.googleusercontent.com</string>
+	<string>51361032312-p8evns3f8egj6eiqe0m49qdheli4p5d3.apps.googleusercontent.com</string>
 </dict>
 </plist>
