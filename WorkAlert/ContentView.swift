@@ -320,6 +320,29 @@ struct SettingsView: View {
                 } footer: {
                     Text("Get notified to check your meetings at these times each day.")
                 }
+
+                // Test Notification Section
+                Section {
+                    Button {
+                        Task {
+                            await store.scheduleTestNotification()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "bell.badge")
+                                .foregroundStyle(.orange)
+                            Text("Test Alarm Sound")
+                            Spacer()
+                            Text("5 sec")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Test")
+                } footer: {
+                    Text("Sends a test notification in 5 seconds. Lock your phone to hear the alarm.")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

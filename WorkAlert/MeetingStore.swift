@@ -286,7 +286,7 @@ class MeetingStore {
             if let location = meeting.location {
                 content.subtitle = location
             }
-            content.sound = .default
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("retro-game.wav"))
             content.categoryIdentifier = "MEETING_ALARM"
 
             let triggerDate = Calendar.current.dateComponents(
@@ -322,6 +322,29 @@ class MeetingStore {
     func cancelAllAlarms() {
         notificationCenter.removeAllPendingNotificationRequests()
         alarmsSet = false
+    }
+
+    // MARK: - Test Notification
+
+    func scheduleTestNotification() async {
+        let content = UNMutableNotificationContent()
+        content.title = "Test Alarm"
+        content.body = "This is how your meeting alerts will sound"
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("retro-game.wav"))
+        content.categoryIdentifier = "MEETING_ALARM"
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "test-notification",
+            content: content,
+            trigger: trigger
+        )
+
+        do {
+            try await notificationCenter.add(request)
+        } catch {
+            print("Failed to schedule test notification: \(error)")
+        }
     }
 
     // MARK: - Helpers
