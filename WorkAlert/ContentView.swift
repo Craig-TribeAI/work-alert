@@ -3,146 +3,62 @@ import SwiftUI
 struct ContentView: View {
     @State private var store = MeetingStore()
     @State private var authManager = GoogleAuthManager()
-    @State private var showingConfirmation = false
+    @State private var showSettings = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Data source selector
-                dataSourceSection
-
                 // Header instruction text
                 headerSection
 
                 // Meeting list
                 meetingListSection
-
-                // Set Alarms button
-                bottomButtonSection
             }
-            .navigationTitle("Work Alert")
+            .navigationTitle("Daily Nudge")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView(store: store, authManager: authManager)
+            }
             .task {
                 await store.requestNotificationPermission()
                 store.configureCalendarService(authManager: authManager)
-            }
-            .alert("Alarms Set!", isPresented: $showingConfirmation) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                let count = store.futureMeetingsCount
-                if count > 0 {
-                    Text("You'll be alerted 1 minute before \(count) meeting\(count == 1 ? "" : "s").")
-                } else {
-                    Text("No upcoming meetings to set alarms for.")
+                // Auto-load from Google if signed in
+                if authManager.isSignedIn {
+                    await store.loadFromGoogleCalendar()
                 }
+                await store.scheduleAlarms()
+                await store.scheduleDailyReminders()
             }
             .refreshable {
-                await store.refreshMeetings()
+                if authManager.isSignedIn {
+                    await store.loadFromGoogleCalendar()
+                } else {
+                    await store.refreshMeetings()
+                }
+                await store.scheduleAlarms()
             }
-        }
-    }
-
-    // MARK: - Data Source Section
-
-    private var dataSourceSection: some View {
-        VStack(spacing: 12) {
-            if authManager.isSignedIn {
-                // Signed in - show account info and data source toggle
-                HStack {
-                    Image(systemName: "person.crop.circle.fill")
-                        .foregroundStyle(.green)
-                    Text(authManager.userEmail ?? "Connected")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Sign Out") {
-                        authManager.signOut()
-                        store.switchToMockData()
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                }
-
-                // Toggle between mock and real data
-                HStack {
-                    Button {
-                        store.switchToMockData()
-                    } label: {
-                        Text("Mock Data")
-                            .font(.caption)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(store.dataSource == .mock ? Color.orange : Color.gray.opacity(0.3))
-                            .foregroundStyle(store.dataSource == .mock ? .white : .primary)
-                            .clipShape(Capsule())
-                    }
-
-                    Button {
-                        Task {
-                            await store.loadFromGoogleCalendar()
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            if store.isLoading {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                            }
-                            Text("Google Calendar")
-                        }
-                        .font(.caption)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(store.dataSource == .googleCalendar ? Color.orange : Color.gray.opacity(0.3))
-                        .foregroundStyle(store.dataSource == .googleCalendar ? .white : .primary)
-                        .clipShape(Capsule())
-                    }
-                    .disabled(store.isLoading)
-
-                    Spacer()
-                }
-            } else {
-                // Not signed in - show connect button
-                HStack {
-                    Image(systemName: "calendar.badge.plus")
-                        .foregroundStyle(.orange)
-                    Text("Connect your calendar to load real meetings")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-
-                Button {
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                if newPhase == .active {
                     Task {
-                        do {
-                            try await authManager.signIn()
+                        if authManager.isSignedIn {
                             await store.loadFromGoogleCalendar()
-                        } catch {
-                            print("Sign in error: \(error)")
+                        } else {
+                            await store.refreshMeetings()
                         }
+                        await store.scheduleAlarms()
                     }
-                } label: {
-                    HStack {
-                        Image(systemName: "g.circle.fill")
-                        Text("Sign in with Google")
-                    }
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
             }
-
-            // Error message
-            if let error = store.errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
     }
 
     // MARK: - Header Section
@@ -150,7 +66,7 @@ struct ContentView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Here are your meetings today.")
+                Text("Today's lineup. Let's do this.")
                     .font(.headline)
                 Spacer()
                 if store.dataSource == .mock {
@@ -164,9 +80,27 @@ struct ContentView: View {
                         .clipShape(Capsule())
                 }
             }
-            Text("Toggle off any you don't need alarms for. Tap Set Alarms and you're done.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                if store.alarmsSet && store.futureMeetingsCount > 0 {
+                    Image(systemName: "bell.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                    Text("Alarms active for \(store.futureMeetingsCount) meeting\(store.futureMeetingsCount == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else if !store.notificationPermissionGranted {
+                    Image(systemName: "bell.slash")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    Text("Enable notifications in Settings")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                } else {
+                    Text("Toggle off any meetings you don't need alarms for.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -205,45 +139,16 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Bottom Button Section
-
-    private var bottomButtonSection: some View {
-        VStack(spacing: 12) {
-            Button {
-                Task {
-                    await store.scheduleAlarms()
-                    showingConfirmation = true
-                }
-            } label: {
-                HStack {
-                    Image(systemName: "bell.fill")
-                    Text("Set Alarms")
-                }
-                .font(.headline)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(store.notificationPermissionGranted ? Color.orange : Color.gray)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .disabled(!store.notificationPermissionGranted || store.meetings.isEmpty)
-
-            if !store.notificationPermissionGranted {
-                Text("Please enable notifications in Settings to use alarms.")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding()
-        .background(Color(.systemBackground))
-    }
 }
 
 // MARK: - Meeting Row Component
 
 struct MeetingRow: View {
     @Binding var meeting: Meeting
+
+    private var isPast: Bool {
+        meeting.startTime < Date()
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -279,13 +184,144 @@ struct MeetingRow: View {
 
             Spacer()
 
-            // Alarm toggle
-            Toggle("", isOn: $meeting.alarmEnabled)
-                .labelsHidden()
-                .tint(.orange)
+            // Alarm toggle (disabled for past meetings)
+            if isPast {
+                Text("Past")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Toggle("", isOn: $meeting.alarmEnabled)
+                    .labelsHidden()
+                    .tint(.orange)
+            }
         }
         .padding(.vertical, 4)
-        .opacity(meeting.alarmEnabled ? 1.0 : 0.6)
+        .opacity(isPast ? 0.4 : (meeting.alarmEnabled ? 1.0 : 0.6))
+    }
+}
+
+// MARK: - Settings View
+
+struct SettingsView: View {
+    @Bindable var store: MeetingStore
+    @Bindable var authManager: GoogleAuthManager
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // Google Account Section
+                Section {
+                    if authManager.isSignedIn {
+                        HStack {
+                            Image(systemName: "person.crop.circle.fill")
+                                .foregroundStyle(.green)
+                            VStack(alignment: .leading) {
+                                Text("Connected")
+                                    .font(.subheadline)
+                                if let email = authManager.userEmail {
+                                    Text(email)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Button("Sign Out") {
+                                authManager.signOut()
+                                store.switchToMockData()
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                        }
+                    } else {
+                        Button {
+                            Task {
+                                do {
+                                    try await authManager.signIn()
+                                    await store.loadFromGoogleCalendar()
+                                    await store.scheduleAlarms()
+                                } catch {
+                                    print("Sign in error: \(error)")
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "g.circle.fill")
+                                    .foregroundStyle(.blue)
+                                Text("Sign in with Google")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Calendar")
+                } footer: {
+                    Text("Connect your Google Calendar to see your real meetings.")
+                }
+
+                // Daily Reminders Section
+                Section {
+                    ForEach($store.dailyReminders) { $reminder in
+                        HStack {
+                            DatePicker(
+                                "",
+                                selection: Binding(
+                                    get: {
+                                        var components = DateComponents()
+                                        components.hour = reminder.hour
+                                        components.minute = reminder.minute
+                                        return Calendar.current.date(from: components) ?? Date()
+                                    },
+                                    set: { newDate in
+                                        let components = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                                        reminder.hour = components.hour ?? 8
+                                        reminder.minute = components.minute ?? 0
+                                        store.saveDailyReminders()
+                                    }
+                                ),
+                                displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden()
+
+                            Spacer()
+
+                            Toggle("", isOn: $reminder.isEnabled)
+                                .labelsHidden()
+                                .onChange(of: reminder.isEnabled) {
+                                    store.saveDailyReminders()
+                                }
+                        }
+                    }
+                    .onDelete(perform: store.removeDailyReminder)
+
+                    Button {
+                        store.addDailyReminder()
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Add Reminder")
+                        }
+                    }
+                } header: {
+                    Text("Daily Reminders")
+                } footer: {
+                    Text("Get notified to check your meetings at these times each day.")
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
