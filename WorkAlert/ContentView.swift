@@ -130,8 +130,17 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity)
             } else {
                 List {
-                    ForEach($store.meetings) { $meeting in
-                        MeetingRow(meeting: $meeting)
+                    ForEach(store.meetings) { meeting in
+                        MeetingRow(
+                            meeting: Binding(
+                                get: { store.meetings.first { $0.id == meeting.id } ?? meeting },
+                                set: { newValue in
+                                    if let index = store.meetings.firstIndex(where: { $0.id == meeting.id }) {
+                                        store.meetings[index] = newValue
+                                    }
+                                }
+                            )
+                        )
                     }
                 }
                 .listStyle(.insetGrouped)

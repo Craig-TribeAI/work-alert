@@ -134,6 +134,9 @@ class MeetingStore {
     // MARK: - Load Meetings from Google Calendar
 
     func loadFromGoogleCalendar() async {
+        // Prevent concurrent loads
+        guard !isLoading else { return }
+
         guard let service = calendarService else {
             errorMessage = "Calendar service not configured"
             return
@@ -283,7 +286,7 @@ class MeetingStore {
             if let location = meeting.location {
                 content.subtitle = location
             }
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("retro-game.wav"))
+            content.sound = .default
             content.categoryIdentifier = "MEETING_ALARM"
 
             let triggerDate = Calendar.current.dateComponents(

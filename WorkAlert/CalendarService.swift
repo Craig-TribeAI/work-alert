@@ -17,7 +17,9 @@ class CalendarService {
         let calendar = Calendar.current
         let now = Date()
         let startOfDay = calendar.startOfDay(for: now)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            throw CalendarServiceError.invalidResponse
+        }
 
         // Format dates for API (RFC3339)
         let formatter = ISO8601DateFormatter()
@@ -26,7 +28,9 @@ class CalendarService {
         let timeMax = formatter.string(from: endOfDay)
 
         // Build URL with query parameters
-        var components = URLComponents(string: "\(baseURL)/calendars/primary/events")!
+        guard var components = URLComponents(string: "\(baseURL)/calendars/primary/events") else {
+            throw CalendarServiceError.invalidResponse
+        }
         components.queryItems = [
             URLQueryItem(name: "timeMin", value: timeMin),
             URLQueryItem(name: "timeMax", value: timeMax),
@@ -35,7 +39,11 @@ class CalendarService {
             URLQueryItem(name: "maxResults", value: "50")
         ]
 
-        var request = URLRequest(url: components.url!)
+        guard let url = components.url else {
+            throw CalendarServiceError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -99,6 +107,16 @@ class CalendarService {
 
 struct GoogleCalendarResponse: Codable {
     let items: [GoogleCalendarEvent]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Handle missing or null items gracefully
+        items = try container.decodeIfPresent([GoogleCalendarEvent].self, forKey: .items) ?? []
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case items
+    }
 }
 
 struct GoogleCalendarEvent: Codable {

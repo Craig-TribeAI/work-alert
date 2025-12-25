@@ -14,7 +14,6 @@ class GoogleAuthManager {
     private let calendarScope = "https://www.googleapis.com/auth/calendar.readonly"
 
     init() {
-        // Check if user is already signed in
         restorePreviousSignIn()
     }
 
@@ -37,8 +36,16 @@ class GoogleAuthManager {
     // MARK: - Sign In
 
     func signIn() async throws {
-        guard let windowScene = await UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootViewController = await windowScene.windows.first?.rootViewController else {
+        // Get root view controller on main thread
+        let rootViewController: UIViewController? = await MainActor.run {
+            guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let rootVC = windowScene.windows.first?.rootViewController else {
+                return nil
+            }
+            return rootVC
+        }
+
+        guard let rootViewController = rootViewController else {
             throw GoogleAuthError.noRootViewController
         }
 
@@ -54,14 +61,18 @@ class GoogleAuthManager {
                     additionalScopes: [self.calendarScope]
                 ) { [weak self] result, error in
                     if let error = error {
-                        self?.error = error.localizedDescription
+                        DispatchQueue.main.async {
+                            self?.error = error.localizedDescription
+                        }
                         continuation.resume(throwing: error)
                         return
                     }
 
                     guard let user = result?.user else {
                         let error = GoogleAuthError.noUser
-                        self?.error = error.localizedDescription
+                        DispatchQueue.main.async {
+                            self?.error = error.localizedDescription
+                        }
                         continuation.resume(throwing: error)
                         return
                     }
@@ -70,8 +81,8 @@ class GoogleAuthManager {
                         self?.isSignedIn = true
                         self?.userEmail = user.profile?.email
                         self?.error = nil
+                        continuation.resume()
                     }
-                    continuation.resume()
                 }
             }
         }
