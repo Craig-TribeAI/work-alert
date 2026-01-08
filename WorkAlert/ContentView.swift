@@ -139,7 +139,10 @@ struct ContentView: View {
                                         store.meetings[index] = newValue
                                     }
                                 }
-                            )
+                            ),
+                            onToggleChanged: {
+                                store.saveToggleStates()
+                            }
                         )
                     }
                 }
@@ -154,6 +157,7 @@ struct ContentView: View {
 
 struct MeetingRow: View {
     @Binding var meeting: Meeting
+    var onToggleChanged: (() -> Void)?
 
     private var isPast: Bool {
         meeting.startTime < Date()
@@ -202,6 +206,9 @@ struct MeetingRow: View {
                 Toggle("", isOn: $meeting.alarmEnabled)
                     .labelsHidden()
                     .tint(.orange)
+                    .onChange(of: meeting.alarmEnabled) {
+                        onToggleChanged?()
+                    }
             }
         }
         .padding(.vertical, 4)

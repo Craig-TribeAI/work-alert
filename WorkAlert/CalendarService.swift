@@ -76,7 +76,8 @@ class CalendarService {
             }
 
             return Meeting(
-                id: UUID(), // Generate new UUID since Google IDs are strings
+                id: UUID(),
+                calendarEventId: event.id,  // Preserve Google Calendar event ID for matching
                 title: event.summary ?? "Untitled Meeting",
                 startTime: start,
                 endTime: end,

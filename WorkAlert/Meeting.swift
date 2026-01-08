@@ -2,6 +2,7 @@ import Foundation
 
 struct Meeting: Identifiable, Hashable {
     let id: UUID
+    let calendarEventId: String?  // Google Calendar event ID for matching across refreshes
     let title: String
     let startTime: Date
     let endTime: Date
@@ -11,6 +12,7 @@ struct Meeting: Identifiable, Hashable {
 
     init(
         id: UUID = UUID(),
+        calendarEventId: String? = nil,
         title: String,
         startTime: Date,
         endTime: Date,
@@ -19,6 +21,7 @@ struct Meeting: Identifiable, Hashable {
         alarmEnabled: Bool = true
     ) {
         self.id = id
+        self.calendarEventId = calendarEventId
         self.title = title
         self.startTime = startTime
         self.endTime = endTime
@@ -37,5 +40,24 @@ struct Meeting: Identifiable, Hashable {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return "\(formatter.string(from: startTime)) - \(formatter.string(from: endTime))"
+    }
+
+    /// Stable identifier for matching meetings across refreshes
+    /// Uses calendar event ID if available, falls back to title+time hash
+    var stableId: String {
+        if let eventId = calendarEventId {
+            return eventId
+        }
+        // For mock data, use title + start time as a stable identifier
+        let dateFormatter = ISO8601DateFormatter()
+        return "\(title)-\(dateFormatter.string(from: startTime))"
+    }
+
+    /// Check if this meeting has meaningfully changed from another (same stableId)
+    func hasChanged(from other: Meeting) -> Bool {
+        return title != other.title ||
+               abs(startTime.timeIntervalSince(other.startTime)) > 60 ||
+               abs(endTime.timeIntervalSince(other.endTime)) > 60 ||
+               location != other.location
     }
 }

@@ -40,6 +40,7 @@ class MeetingStore {
 
     private let alarmsSetDateKey = "alarmsSetDate"
     private let dailyRemindersKey = "dailyReminders"
+    private let toggleStatesKey = "meetingToggleStates"
 
     init(dataSource: DataSource = .mock) {
         self.dataSource = dataSource
@@ -62,6 +63,53 @@ class MeetingStore {
 
     private func saveAlarmsSetDate() {
         UserDefaults.standard.set(Date(), forKey: alarmsSetDateKey)
+    }
+
+    // MARK: - Toggle State Persistence
+
+    /// Save toggle states keyed by meeting's stableId
+    func saveToggleStates() {
+        var states: [String: Bool] = [:]
+        for meeting in meetings {
+            states[meeting.stableId] = meeting.alarmEnabled
+        }
+        UserDefaults.standard.set(states, forKey: toggleStatesKey)
+    }
+
+    /// Load saved toggle states
+    private func loadToggleStates() -> [String: Bool] {
+        return UserDefaults.standard.dictionary(forKey: toggleStatesKey) as? [String: Bool] ?? [:]
+    }
+
+    /// Merge new meetings with existing toggle states
+    /// Preserves toggle state for meetings that haven't meaningfully changed
+    private func mergeWithExistingState(_ newMeetings: [Meeting]) -> [Meeting] {
+        let savedStates = loadToggleStates()
+        let existingMeetings = Dictionary(uniqueKeysWithValues: meetings.map { ($0.stableId, $0) })
+
+        return newMeetings.map { newMeeting in
+            let stableId = newMeeting.stableId
+
+            // Check if we have this meeting in current list
+            if let existingMeeting = existingMeetings[stableId] {
+                // Meeting exists - preserve toggle if it hasn't meaningfully changed
+                if !newMeeting.hasChanged(from: existingMeeting) {
+                    var merged = newMeeting
+                    merged.alarmEnabled = existingMeeting.alarmEnabled
+                    return merged
+                }
+            }
+
+            // Check if we have a saved toggle state for this meeting
+            if let savedState = savedStates[stableId] {
+                var merged = newMeeting
+                merged.alarmEnabled = savedState
+                return merged
+            }
+
+            // New meeting or meaningfully changed - use default
+            return newMeeting
+        }
     }
 
     private func loadDailyReminders() {
@@ -150,9 +198,11 @@ class MeetingStore {
         do {
             let fetchedMeetings = try await service.fetchTodaysMeetings()
             await MainActor.run {
-                self.meetings = fetchedMeetings
+                // Merge with existing toggle states instead of replacing
+                self.meetings = self.mergeWithExistingState(fetchedMeetings)
                 self.dataSource = .googleCalendar
                 self.isLoading = false
+                self.saveToggleStates()
             }
         } catch {
             await MainActor.run {
@@ -194,7 +244,7 @@ class MeetingStore {
             return calendar.date(from: components) ?? today
         }
 
-        meetings = [
+        let mockMeetings = [
             Meeting(
                 title: "FD sync [bi-weekly]",
                 startTime: todayAt(hour: 9, minute: 0),
@@ -242,7 +292,10 @@ class MeetingStore {
                 isRecurring: true
             )
         ]
+        // Merge with existing toggle states
+        meetings = mergeWithExistingState(mockMeetings)
         dataSource = .mock
+        saveToggleStates()
     }
 
     // MARK: - Notification Permission
@@ -286,7 +339,7 @@ class MeetingStore {
             if let location = meeting.location {
                 content.subtitle = location
             }
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("retro-game.wav"))
+            content.sound = UNNotificationSound(named: UNNotificationSoundName("notification-new.wav"))
             content.categoryIdentifier = "MEETING_ALARM"
 
             let triggerDate = Calendar.current.dateComponents(
@@ -330,7 +383,7 @@ class MeetingStore {
         let content = UNMutableNotificationContent()
         content.title = "Test Alarm"
         content.body = "This is how your meeting alerts will sound"
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("retro-game.wav"))
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("notification-new.wav"))
         content.categoryIdentifier = "MEETING_ALARM"
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
